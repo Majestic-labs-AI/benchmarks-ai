@@ -52,6 +52,35 @@ which torpedoes my hope of using `llama-bench` as a golden standard.
 
 ### Setting up a Google L4
 
+```bash
+gcloud auth login
+gcloud config set project nono
+gcloud compute instances create nvidia-l4 \
+    --project=blabbertabber \
+    --zone=northamerica-northeast2-a \
+    --machine-type=g2-standard-8  \
+    --maintenance-policy=TERMINATE --restart-on-failure \
+    --network-interface=nic-type=GVNIC \
+    --accelerator=type=nvidia-l4-vws,count=1 \
+    --image-family=c0-deeplearning-common-cpu-v20230925-debian-10 \
+    --image-project=ml-images \
+    --boot-disk-size=200GB \
+    --boot-disk-type=pd-ssd
+```
+
+Watch out! There not be any _g2-standard-8_ available in zone _us-central-1a_
+
+```
+A g2-standard-8 VM instance with 1 nvidia-l4-vws accelerator(s) is currently
+unavailable in the us-central1-a zone. Alternatively, you can try your request
+again with a different VM hardware configuration or at a later time. For more
+information, see the troubleshooting documentation
+```
+
+```bash
+gcloud compute machine-types list --zones us-central1-a --filter g2
+```
+
 ## Setting up a Noble Numbat AI workstation
 
 Install on Linux (macOS isn't able to install the Python triton library):

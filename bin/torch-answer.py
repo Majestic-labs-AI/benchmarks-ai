@@ -1,3 +1,8 @@
+#
+# DEPRECATED!
+#
+# This script is deprecated in favor of a more standard LLM-benchmarking suite
+
 import time
 import torch
 import sys

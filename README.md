@@ -1,6 +1,58 @@
-# Benchmarking AI Performance
+# Benchmarking Large Language Model (LLM) Artificial Intelligence (AI) Performance
 
-### Quick Start
+| model                          |       size |     params | backend    | threads |          test |              t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | ------: | ------------: | ---------------: |
+| Meta llama 3 8B F16            |  14.96 GiB |     8.03 B | CPU        |       4 |         pp512 |      8.95 ± 0.99 |
+| Meta llama 3 8B F16            |  14.96 GiB |     8.03 B | CPU        |       4 |         tg128 |      2.15 ± 0.02 |
+
+- We're using Georgi Gerganov's
+[llama-bench](https://github.com/ggerganov/llama.cpp/tree/master/examples/llama-bench)
+- _llama-bench_ benchmarks only one engine (executor); it doesn't benchmark,
+for example, [Triton](https://github.com/triton-lang/triton)
+- Headings
+  - **model**: LLM Model, such as Meta's [Meta-Llama-3-8B](https://huggingface.co/meta-llama/Meta-Llama-3-8B).
+  - **size**: (¿RAM footprint?), e.g. 14.96 GiB
+  - **params**: number of the model's parameters, e.g. "8.03 B" (8 billion)
+  - **backend**:
+    - **CPU**: you don't want this ;-)
+    - **GPU**: Graphic
+  - **threads**: (?number of independent threads?) e.g. "4"
+  - **test**: [type of test](https://github.com/ggerganov/llama.cpp/tree/master/examples/llama-bench) performed:
+    - **pp**: "Prompt processing: processing a prompt in batches". Higher is better.
+    - **tg**: "Text generation: generating a sequence of tokens". Higher is better.
+
+Typical invocation to run benchmark against a model:
+
+```bash
+./llama-bench -m models/ggml-model-f16.gguf
+```
+
+To convert a model from Hugging Face to llama.cpp's `.gguf` format:
+
+```bash
+python convert_hf_to_gguf.py ~/workspace/Meta-Llama-3-8B/
+```
+
+Where `~/workspace/Meta-Llama-3-8B/` was downloaded/cloned from
+<https://huggingface.co/meta-llama/Meta-Llama-3-8B>
+
+Here's an example, run from within the _llama.cpp_ repo:
+
+```bash
+. ~/workspace/benchmarks-ai/venv/bin/activate
+pip install -U "huggingface_hub[cli]"
+huggingface-cli login
+huggingface-cli download deepset/roberta-base-squad2 --local-dir models/roberta-base-squad2
+python convert_hf_to_gguf.py models/roberta-base-squad2
+```
+
+It appears that the conversion is [only for  LLaMA
+models](https://github.com/ggerganov/llama.cpp/discussions/2948#discussioncomment-6925099),
+which torpedoes my hope of using `llama-bench` as a golden standard.
+
+### Setting up a Google L4
+
+## Setting up a Noble Numbat AI workstation
 
 Install on Linux (macOS isn't able to install the Python triton library):
 
@@ -10,18 +62,7 @@ cd benchmarks-ai
 python -m venv venv
 . venv/bin/activate
 pip install matplotlib numpy pandas ffmpeg setuptools torch transformers triton
-python bin/torch-answer.py
 ```
-
-The last line of the output looks like this:
-
-```json
-{"device": "cpu", "tokens_per_second": 681}
-```
-
-Which means, "I used the device _cpu_, not _cuda_, (i.e. I ran on the Intel
-CPU, not the NVIDIA GPU) to run the benchmark, and the resulting throughput
-was 681 tokens/second."
 
 ### Troubleshooting
 

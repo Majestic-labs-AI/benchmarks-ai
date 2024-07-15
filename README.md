@@ -58,14 +58,20 @@ gcloud config set project nono
 gcloud compute instances create nvidia-l4 \
     --project=blabbertabber \
     --zone=northamerica-northeast2-a \
-    --machine-type=g2-standard-8  \
-    --maintenance-policy=TERMINATE --restart-on-failure \
-    --network-interface=nic-type=GVNIC \
-    --accelerator=type=nvidia-l4-vws,count=1 \
-    --image-family=c0-deeplearning-common-cpu-v20230925-debian-10 \
-    --image-project=ml-images \
-    --boot-disk-size=200GB \
-    --boot-disk-type=pd-ssd
+    --machine-type=g2-standard-8 \
+    --network-interface=network-tier=PREMIUM,stack-type=IPV4_ONLY,subnet=default \
+    --maintenance-policy=TERMINATE \
+    --provisioning-model=STANDARD \
+    --service-account=787364477489-compute@developer.gserviceaccount.com \
+    --scopes=https://www.googleapis.com/auth/devstorage.read_only,https://www.googleapis.com/auth/logging.write,https://www.googleapis.com/auth/monitoring.write,https://www.googleapis.com/auth/service.management.readonly,https://www.googleapis.com/auth/servicecontrol,https://www.googleapis.com/auth/trace.append \
+    --accelerator=count=1,type=nvidia-l4 \
+    --create-disk=auto-delete=yes,boot=yes,device-name=nvidia-l4,image=projects/ml-images/global/images/c1-deeplearning-tf-2-16-cu123-v20240708-debian-11-py310,mode=rw,size=200,type=projects/blabbertabber/zones/northamerica-northeast2-c/diskTypes/pd-ssd \
+    --no-shielded-secure-boot \
+    --shielded-vtpm \
+    --shielded-integrity-monitoring \
+    --labels=goog-ec-src=vm_add-gcloud \
+    --reservation-affinity=any
+gcloud compute ssh nvidia-l4
 ```
 
 Watch out! There not be any _g2-standard-8_ available in zone _us-central-1a_

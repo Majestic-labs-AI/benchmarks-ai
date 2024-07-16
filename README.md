@@ -1,12 +1,18 @@
 # Benchmarking Large Language Model (LLM) Artificial Intelligence (AI) Performance
 
-| model                          |       size |     params | backend    | threads |          test |              t/s |
-| ------------------------------ | ---------: | ---------: | ---------- | ------: | ------------: | ---------------: |
-| Meta llama 3 8B F16            |  14.96 GiB |     8.03 B | CPU        |       4 |         pp512 |      8.95 ± 0.99 |
-| Meta llama 3 8B F16            |  14.96 GiB |     8.03 B | CPU        |       4 |         tg128 |      2.15 ± 0.02 |
+## Benchmarks Using Georgi Gerganov's [llama-bench](https://github.com/ggerganov/llama.cpp/tree/master/examples/llama-bench)
 
-- We're using Georgi Gerganov's
-[llama-bench](https://github.com/ggerganov/llama.cpp/tree/master/examples/llama-bench)
+| model                          |       size |     params | backend    | threads |          test |    tokens/second |  notes |
+| ------------------------------ | ---------: | ---------: | ---------- | ------: | ------------: | ---------------: | ------ |
+| Meta llama 3 8B F16            |  14.96 GiB |     8.03 B | CPU        |       4 |         pp512 |      8.95 ± 0.99 | [vSphere](#vsphere) |
+| Meta llama 3 8B F16            |  14.96 GiB |     8.03 B | CPU        |       4 |         tg128 |      2.15 ± 0.02 | [vSphere](#vsphere) |
+| Meta llama 3 8B F16            |  14.96 GiB |     8.03 B | CUDA       |      99 |         pp512 |  1444.68 ± 60.51 | [vSphere](#vsphere) |
+| Meta llama 3 8B F16            |  14.96 GiB |     8.03 B | CUDA       |      99 |         tg128 |     16.40 ± 0.04 | [vSphere](#vsphere) |
+| Meta llama 3 8B F16            |  14.96 GiB |     8.03 B | CPU        |       4 |         pp512 |     13.12 ± 0.10 | [Google L4](#google_l4) |
+| Meta llama 3 8B F16            |  14.96 GiB |     8.03 B | CPU        |       4 |         tg128 |      2.91 ± 0.01 | [Google L4](#google_l4) |
+| Meta llama 3 8B F16            |  14.96 GiB |     8.03 B | CUDA       |      99 |         pp512 | 2270.05 ± 127.44 | [Google L4](#google_l4) |
+| Meta llama 3 8B F16            |  14.96 GiB |     8.03 B | CUDA       |      99 |         tg128 |     16.07 ± 0.03 | [Google L4](#google_l4) |
+
 - _llama-bench_ benchmarks only one engine (executor); it doesn't benchmark,
 for example, [Triton](https://github.com/triton-lang/triton)
 - Headings
@@ -18,20 +24,9 @@ for example, [Triton](https://github.com/triton-lang/triton)
     - **GPU**: Graphic
   - **threads**: (?number of independent threads?) e.g. "4"
   - **test**: [type of test](https://github.com/ggerganov/llama.cpp/tree/master/examples/llama-bench) performed:
-    - **pp**: "Prompt processing: processing a prompt in batches". Higher is better.
+    - **pp**: "Prompt processing: processing a prompt in **batches**". Higher is better.
     - **tg**: "Text generation: generating a sequence of tokens". Higher is better.
 
-Typical invocation to run benchmark against a model:
-
-```bash
-./llama-bench -m models/ggml-model-f16.gguf
-```
-
-To convert a model from Hugging Face to llama.cpp's `.gguf` format:
-
-```bash
-python convert_hf_to_gguf.py ~/workspace/Meta-Llama-3-8B/
-```
 
 Where `~/workspace/Meta-Llama-3-8B/` was downloaded/cloned from
 <https://huggingface.co/meta-llama/Meta-Llama-3-8B>
@@ -54,7 +49,8 @@ which torpedoes my hope of using `llama-bench` as a golden standard.
 
 ```bash
 gcloud auth login
-gcloud config set project nono
+gcloud config set project blabbertabber
+gcloud compute disks create benchmarks --size=300GB --type=pd-ssd --zone=northamerica-northeast2-a
 gcloud compute instances create nvidia-l4 \
     --project=blabbertabber \
     --zone=northamerica-northeast2-a \
@@ -71,21 +67,48 @@ gcloud compute instances create nvidia-l4 \
     --shielded-integrity-monitoring \
     --labels=goog-ec-src=vm_add-gcloud \
     --reservation-affinity=any
-gcloud compute ssh nvidia-l4
+gcloud compute instances attach-disk nvidia-l4 --disk=benchmarks --zone=northamerica-northeast2-a
+gcloud compute ssh nvidia-l4 -- -A
 ```
 
-Watch out! There not be any _g2-standard-8_ available in zone _us-central-1a_
+The VM will ask us, "Would you like to install the Nvidia driver?", to which there's only one answer, "y".
 
-```
-A g2-standard-8 VM instance with 1 nvidia-l4-vws accelerator(s) is currently
-unavailable in the us-central1-a zone. Alternatively, you can try your request
-again with a different VM hardware configuration or at a later time. For more
-information, see the troubleshooting documentation
-```
+### Setting Up the Persistent Disk
 
 ```bash
-gcloud compute machine-types list --zones us-central1-a --filter g2
+lsblk
+sudo parted /dev/nvme0n2
+  mklabel gpt
+  mkpart primary ext4 0% 100%
+  quit
+sudo mkfs.ext4 /dev/nvme0n2p1
+sudo mkdir /mnt/work
+sudo mount /dev/nvme0n2p1 /mnt/work
+sudo chown $USER /mnt/work
 ```
+
+Let's download [Meta's LLMaMA 3](https://huggingface.co/meta-llama/Meta-Llama-3-8B) and benchmark it:
+
+```bash
+ # We need Git LFS for some of the models, and I like fd-find
+sudo apt-get install git-lfs fd-find
+cd /mnt/work
+git clone git@github.com:ggerganov/llama.cpp
+  # Install the necessary Python libraries
+pip install "huggingface_hub[cli]" matplotlib numpy pandas ffmpeg sentencepiece setuptools torch transformers triton
+huggingface-cli login
+  # Make sure to download LLaMA to the persistent disk, not the local SSD
+huggingface-cli download meta-llama/Meta-Llama-3-8B --local-dir Meta-Llama-3-8B
+cd llama.cpp
+  # We need to create the .gguf file for llama-bench
+python convert_hf_to_gguf.py ../Meta-Llama-3-8B/
+mv ../Meta-Llama-3-8B/ggml-model-f16.gguf models/Meta-Llama-3-8B.gguf
+  # Compile llama-bench with CUDA
+make GGML_CUDA=1 -j4
+  # Run the benchmark
+./llama-bench -m models/Meta-Llama-3-8B.gguf
+```
+
 
 ## Setting up a Noble Numbat AI workstation
 
@@ -100,6 +123,19 @@ pip install matplotlib numpy pandas ffmpeg setuptools torch transformers triton
 ```
 
 ### Troubleshooting
+
+Watch out! There might not be any _g2-standard-8_ available in zone _us-central-1a_
+
+```
+A g2-standard-8 VM instance with 1 nvidia-l4-vws accelerator(s) is currently
+unavailable in the us-central1-a zone. Alternatively, you can try your request
+again with a different VM hardware configuration or at a later time. For more
+information, see the troubleshooting documentation
+```
+
+```bash
+gcloud compute machine-types list --zones us-central1-a --filter g2
+```
 
 When seeing this error:
 
@@ -141,6 +177,35 @@ sudo nvim /usr/src/linux-headers-6.8.0-36/include/drm/drm_ioctl.h
 ```bash
 sudo shutdown -r now
 ```
+
+### Footnotes
+
+<a name="vsphere">vSphere</a>
+
+- Linux distribution: Ubuntu Noble Numbat 24.04 (“cat /etc/lsb-release”)
+- Linux kernel: 6.8.0-38-generic (“uname -a”)
+- Hardware (virtual machine):
+  - CPU: Intel(R) Xeon(R) D-1736NT CPU @ 2.70GHz (“cat /proc/cpuinfo”)
+  - 4 cores
+  - 32 GiB RAM (“htop”)
+- NVIDIA Tesla T4 16 GiB TU104GL (“nvidia-smi”, “lspci | grep -i nvidia”)
+- NVIDIA drivers 545.29.06 (“nvidia-smi”)
+- CUDA Version: 12.3 (“nvidia-smi”)
+- Python 3.12.3 (“python --version”)
+
+<a name="google_l4">Google L4</a>
+
+- Linux distribution: Debian GNU/Linux 11 (bullseye) (“cat /etc/os-release”)
+- Linux kernel: 5.10.0-30-cloud-amd64 (“uname -a”)
+- Hardware (virtual machine):
+  - CPU: Intel(R) Xeon(R) CPU @ 2.20GHz (“cat /proc/cpuinfo”)
+  - 8 cores
+  - 32 GiB RAM (“htop”)
+- NVIDIA Tesla L4 24 GiB (“nvidia-smi”, “lspci | grep -i nvidia”)
+- NVIDIA drivers 550.90.07 (“nvidia-smi”)
+- CUDA Version: 12.4 (“nvidia-smi”)
+- Python 3.12.3 (“python --version”)
+
 
 <!--
 When I run my small `triton.py` code from the [tutorial](), I get the following error:

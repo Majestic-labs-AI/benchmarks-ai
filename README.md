@@ -76,7 +76,7 @@ gcloud compute instances delete nvidia-l4
 
 ### Setting up a Google A100
 
-We need to do this in my personal account because the Majestic account doesn't have quota. Also, we switched regions from Toronto to Idaho because Toronto didn't have any A100s (and Idaho didn't have any L4s)
+We need to do this in my personal account because the Majestic account doesn't have quota. Also, we switched regions from Toronto to Iowa because Toronto didn't have any A100s (and Iowa didn't have any L4s)
 
 ```bash
 gcloud compute instances create nvidia-a100 \
@@ -166,19 +166,37 @@ pytest test_bench.py --ignore_machine_config
 
 Using `tmpfs` did not improve our benchmarks (our measurement with `tmpfs`
 clocked in at 16.42 tokens-per-second, and the non-tmpfs runs were [16.40,
-16.43, and 16.38])
+16.43, and 16.38].
 
-Using `tmpfs` did not improve the time of the second-and-subsequent benchmarks.
+Using `tmpfs` did not improve the time of the second-and-subsequent benchmarks,
+but it was definitely faster than the first-run-after-boot.
 
 `llama-bench` is disk bound on the first run, but it doesn't significantly
 affect the measured tokens per second. The run time dropped 30% (62 seconds to
 43 seconds) between the first and subsequent runs, but the tokens-per-second
 generation only increased a negligible 0.1% (16.40 t/s to 16.43 t/s). I
-speculate that the increase in run times was due to the 15 GiB model file being
+speculate that the decrease in run times was due to the 15 GiB model file being
 cached in the kernel's page cache.
 
-Running our tests after a fresh boot showed a 62-second run dropping
-to 43 seconds on subsequent runs:
+Let's try `tmpfs` (after bumping the RAM to 32 → 64 GiB to avoid inadvertently
+introducing another constraint):
+
+```bash
+sudo mkdir -p /mnt/tmpfs
+sudo mount -t tmpfs -o size=24G tmpfs /mnt/tmpfs
+sudo chmod 1777 /mnt/tmpfs
+cp ~/workspace/llama.cpp/models/Meta-Llama-3-8B.gguf /mnt/tmpfs/ # 15G model
+df -h /mnt/tmpfs
+  # Filesystem      Size  Used Avail Use% Mounted on
+  # tmpfs            24G   15G  9.1G  63% /mnt/tmpfs
+time build/bin/llama-bench -m /mnt/tmpfs/Meta-Llama-3-8B.gguf -p 0 -v
+  # 41.85s user 1.37s system 100% cpu 43.209 total
+  # tokens per second was 16.42 ± 0.03
+```
+
+Let's run our tests three times. Note: these tests were run _before_ the
+`tmpfs` test but immediately after rebooting. Running our tests after a fresh
+boot showed a 62-second run dropping to 43 seconds on subsequent runs:
 
 ```bash
 time build/bin/llama-bench -m models/Meta-Llama-3-8B.gguf -p 0 -v
@@ -194,20 +212,6 @@ time build/bin/llama-bench -m models/Meta-Llama-3-8B.gguf -p 0 -v
   # tokens per second was 16.38 ± 0.03
 ```
 
-Let's try `tmpfs` (after bumping the RAM to 32 → 64 GiB to avoid inadvertently introducing another constraint)
-
-```bash
-sudo mkdir -p /mnt/tmpfs
-sudo mount -t tmpfs -o size=24G tmpfs /mnt/tmpfs
-sudo chmod 1777 /mnt/tmpfs
-cp ~/workspace/llama.cpp/models/Meta-Llama-3-8B.gguf /mnt/tmpfs/ # 15G model
-df -h /mnt/tmpfs
-  # Filesystem      Size  Used Avail Use% Mounted on
-  # tmpfs            24G   15G  9.1G  63% /mnt/tmpfs
-time build/bin/llama-bench -m /mnt/tmpfs/Meta-Llama-3-8B.gguf -p 0 -v
-  # 41.85s user 1.37s system 100% cpu 43.209 total
-  # tokens per second was 16.42 ± 0.03
-```
 
 ### Troubleshooting
 

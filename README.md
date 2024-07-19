@@ -138,7 +138,7 @@ cmake --build build --config Release -j
 build/bin/llama-bench -m models/Meta-Llama-3-8B.gguf -p 0 -n 128,256,512
 ```
 
-## Setting up a Noble Numbat AI workstation
+### Setting up the NVIDIA T4 vSphere Noble Numbat AI workstation
 
 Install on Linux (macOS isn't able to install the Python triton library):
 
@@ -160,6 +160,53 @@ Let's run some PyTorch benchmarks
 
 ```bash
 pytest test_bench.py --ignore_machine_config
+```
+
+### Does `tmpfs` improve our benchmarks? Are our tests disk-bound?
+
+Using `tmpfs` did not improve our benchmarks (our measurement with `tmpfs`
+clocked in at 16.42 tokens-per-second, and the non-tmpfs runs were [16.40,
+16.43, and 16.38])
+
+Using `tmpfs` did not improve the time of the second-and-subsequent benchmarks.
+
+`llama-bench` is disk bound on the first run, but it doesn't significantly
+affect the measured tokens per second. The run time dropped 30% (62 seconds to
+43 seconds) between the first and subsequent runs, but the tokens-per-second
+generation only increased a negligible 0.1% (16.40 t/s to 16.43 t/s). I
+speculate that the increase in run times was due to the 15 GiB model file being
+cached in the kernel's page cache.
+
+Running our tests after a fresh boot showed a 62-second run dropping
+to 43 seconds on subsequent runs:
+
+```bash
+time build/bin/llama-bench -m models/Meta-Llama-3-8B.gguf -p 0 -v
+  # 41.62s user 5.72s system 76% cpu 1:02.11 total
+  # tokens per second was 16.40 ± 0.04
+  # Let's try a second run:
+time build/bin/llama-bench -m models/Meta-Llama-3-8B.gguf -p 0 -v
+  # 41.88s user 1.33s system 100% cpu 43.197 total
+  # tokens per second was 16.43 ± 0.04
+  # Let's try a third run:
+time build/bin/llama-bench -m models/Meta-Llama-3-8B.gguf -p 0 -v
+  # 42.10s user 1.34s system 100% cpu 43.428 total
+  # tokens per second was 16.38 ± 0.03
+```
+
+Let's try `tmpfs` (after bumping the RAM to 32 → 64 GiB to avoid inadvertently introducing another constraint)
+
+```bash
+sudo mkdir -p /mnt/tmpfs
+sudo mount -t tmpfs -o size=24G tmpfs /mnt/tmpfs
+sudo chmod 1777 /mnt/tmpfs
+cp ~/workspace/llama.cpp/models/Meta-Llama-3-8B.gguf /mnt/tmpfs/ # 15G model
+df -h /mnt/tmpfs
+  # Filesystem      Size  Used Avail Use% Mounted on
+  # tmpfs            24G   15G  9.1G  63% /mnt/tmpfs
+time build/bin/llama-bench -m /mnt/tmpfs/Meta-Llama-3-8B.gguf -p 0 -v
+  # 41.85s user 1.37s system 100% cpu 43.209 total
+  # tokens per second was 16.42 ± 0.03
 ```
 
 ### Troubleshooting

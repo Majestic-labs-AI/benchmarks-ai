@@ -18,8 +18,8 @@ print(f"Memory reserved: {torch.cuda.memory_reserved() / 1024 ** 2:.2f} MB", fil
 
 script_path = os.path.dirname(__file__)
 llama_path = os.path.join(script_path, "../../Phi-3-mini-4k-instruct/")
-tokenizer = AutoTokenizer.from_pretrained(llama_path)
-model = AutoModelForCausalLM.from_pretrained(llama_path, output_hidden_states=True)
+tokenizer = AutoTokenizer.from_pretrained(llama_path, trust_remote_code=True)
+model = AutoModelForCausalLM.from_pretrained(llama_path, output_hidden_states=True, trust_remote_code=True)
 # Move the model to the GPU
 model.to(device)
 
